@@ -3,7 +3,7 @@ from .serializers import *
 from .models import * 
 
 
-class StockViewset(viewsets.ModelViewSet):
+class StockViewset(viewsets.ReadOnlyModelViewSet):
     queryset = Stock.objects.all()
     serializer_class = StockSerializer
 
