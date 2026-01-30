@@ -9,12 +9,3 @@ from rest_framework.response import Response
 class StockViewset(viewsets.ReadOnlyModelViewSet):
     queryset = Stock.objects.all()
     serializer_class = StockSerializer
-
-    @action(detail=False, methods=['GET'])
-    def call_api(self, request):
-        ingest_stock_prices.delay()
-
-        return Response (
-            {"status": "Stock prices enqueued"},
-            status=status.HTTP_202_ACCEPTED
-        )
