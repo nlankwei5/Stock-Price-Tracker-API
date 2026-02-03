@@ -4,6 +4,9 @@ from .models import *
 import finnhub
 from dotenv import load_dotenv
 import os
+from django.core.cache import cache 
+from django.core.cache.backends.redis import RedisCache
+
 
 load_dotenv()
 
@@ -57,6 +60,7 @@ def ingest_stock_prices():
     
     if stocks_to_be_created:
         Stock.objects.bulk_create(stocks_to_be_created)
+
         print(f"Successfully created {len(stocks_to_be_created)} stock price records")
     else:
         print("No stock prices to create")
