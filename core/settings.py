@@ -45,7 +45,7 @@ INSTALLED_APPS = [
     'django_celery_beat',
     'rest_framework', 
     'api',
-    'daphne',
+    'channels',
 ]
 
 MIDDLEWARE = [
