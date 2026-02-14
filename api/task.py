@@ -64,14 +64,30 @@ def ingest_stock_prices():
     else:
         print("No stock prices to create")
 
+    stock_results = []
     print("Updating Redis cache...")
+
     for stock_obj in stocks_to_be_created:
-        save_stock_prices(
+        result = save_stock_prices(
             ticker=stock_obj.stock,
             price=float(stock_obj.price)
         )
+        if result:
+            stock_results.append(result)
     
-    print("✓ Cache update complete")
+    print(f"✓ Cache update complete. Processed {len(stock_results)} stocks")
+
+    from django.utils import timezone
+
+    message = {
+        "type": "stock_update",
+        "timestamp": timezone.now().isoformat(),
+        "stocks": stock_results
+    }
+
+    publish_to_channels(message)
+
+
         
 
 def save_stock_prices(ticker, price ):
@@ -126,7 +142,8 @@ def save_stock_prices(ticker, price ):
     pipe.rpush(prices_key, price)
     pipe.ltrim(prices_key, -5, -1)
 
-    pipe.set(sma_key, current_sma)
+    if current_sma is not None:
+        pipe.set(sma_key, str(current_sma))
     
     pipe.execute()
     
@@ -150,4 +167,28 @@ def save_stock_prices(ticker, price ):
         print(f"   Price: ${price:.2f} | SMA: ${current_sma:.2f}")
     
     # Log for debugging
-    print(f"✓ {ticker}: Price=${price:.2f}, SMA=${current_sma:.2f}, Cached={len(prices_for_sma)} prices")
+    sma_display = f"{current_sma:.2f}" if current_sma is not None else "Not enough data"
+    print(f"✓ {ticker}: Price=${price:.2f}, SMA={sma_display}, Cached={len(prices_for_sma)} prices")
+
+    return {
+        "ticker": ticker,
+        "price": price,
+        "sma": round(current_sma, 2) if current_sma else None,
+        "alert": alert_type,
+    }
+
+
+
+def publish_to_channels(message):
+    """Publish message to all connected WebSocket clients."""
+    from asgiref.sync import async_to_sync
+    from channels.layers import get_channel_layer
+
+    channel_layer = get_channel_layer()
+
+    async_to_sync(channel_layer.group_send)(
+        "stock_updates",
+        message
+    )
+
+    print(f"📡 Published {len(message['stocks'])} stocks to WebSocket clients")
