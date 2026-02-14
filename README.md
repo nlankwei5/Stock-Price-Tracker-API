@@ -17,7 +17,8 @@ Tracks real-time prices for 15 stocks. Fetches from Finnhub every 60 seconds, ca
 ## Future addtions
 
 - Simple frontend to show how it works
-- Making sure API calls are not made when market closes. This should be done automatically. 
+- Making sure API calls are not made when market closes. This should be done automatically.
+- Migrate database to PostgreSQL
 
 ---
 
@@ -29,7 +30,7 @@ Tracks real-time prices for 15 stocks. Fetches from Finnhub every 60 seconds, ca
 - **Django Channels** — WebSocket support
 - **Uvicorn** — ASGI server
 - **Finnhub** — stock price data
-- **PostgreSQL** — database
+- **SQLite** — database(development environment)
 
 ---
 
