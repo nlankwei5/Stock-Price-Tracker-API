@@ -1,4 +1,3 @@
-from email import message
 from celery import shared_task
 import requests 
 from .models import *
@@ -7,6 +6,7 @@ from dotenv import load_dotenv
 import os
 from django.core.cache import cache
 from django_redis import get_redis_connection
+
 
 load_dotenv()
 
@@ -86,10 +86,15 @@ def ingest_stock_prices():
     }
 
     publish_to_channels(message)
+
+
         
 
-def save_stock_prices(ticker, price):
-    """Update Redis cache and detect alerts for a single stock."""
+def save_stock_prices(ticker, price ):
+    """
+    A function to save stock prices.
+    """
+
 
     prices_key = f"stock:{ticker}:prices"  
     sma_key = f"stock:{ticker}:sma"        
@@ -97,13 +102,17 @@ def save_stock_prices(ticker, price):
     redis_client = get_redis_connection("default")
 
     pipe = redis_client.pipeline()
+
     pipe.lrange(prices_key, 0, -1)  
     pipe.get(sma_key)                
+    
     results = pipe.execute()
 
     cached_prices_json = results[0] 
     previous_sma_bytes = results[1]
 
+    import json
+    
     if cached_prices_json:
         cached_prices = [
             float(p.decode("utf-8")) if isinstance(p, bytes) else float(p)
@@ -120,6 +129,8 @@ def save_stock_prices(ticker, price):
     previous_price = cached_prices[-1] if cached_prices else None
     prices_for_sma = cached_prices + [price]
     prices_for_sma = prices_for_sma[-5:]
+
+    print(prices_for_sma)
     
     if len(prices_for_sma) == 5:
         current_sma = sum(prices_for_sma) / 5
@@ -127,26 +138,37 @@ def save_stock_prices(ticker, price):
         current_sma = None
     
     pipe = redis_client.pipeline()
+    
     pipe.rpush(prices_key, price)
     pipe.ltrim(prices_key, -5, -1)
-    pipe.set(sma_key, current_sma)
+
+    if current_sma is not None:
+        pipe.set(sma_key, str(current_sma))
+    
     pipe.execute()
+    
 
     should_alert = False
     alert_type = None
     
     if previous_price is not None and previous_sma is not None:
+        # Bullish crossover: was below SMA, now above
         if previous_price < previous_sma and price > current_sma:
             should_alert = True
             alert_type = 'bullish'
+        
+        # Bearish crossover: was above SMA, now below
         elif previous_price > previous_sma and price < current_sma:
             should_alert = True
             alert_type = 'bearish'
     
     if should_alert:
         print(f"🚨 ALERT: {ticker} - {alert_type.upper()} crossover!")
-
-    print(f"✓ {ticker}: Price=${price:.2f}, SMA={current_sma}, Cached={len(prices_for_sma)} prices")
+        print(f"   Price: ${price:.2f} | SMA: ${current_sma:.2f}")
+    
+    # Log for debugging
+    sma_display = f"{current_sma:.2f}" if current_sma is not None else "Not enough data"
+    print(f"✓ {ticker}: Price=${price:.2f}, SMA={sma_display}, Cached={len(prices_for_sma)} prices")
 
     return {
         "ticker": ticker,
@@ -156,20 +178,17 @@ def save_stock_prices(ticker, price):
     }
 
 
+
 def publish_to_channels(message):
-    """
-
-    Publish message to all connected WebSocket clients.
-
-    """
+    """Publish message to all connected WebSocket clients."""
     from asgiref.sync import async_to_sync
     from channels.layers import get_channel_layer
 
     channel_layer = get_channel_layer()
 
     async_to_sync(channel_layer.group_send)(
-            "stock_updates",
-            message
-        )
+        "stock_updates",
+        message
+    )
 
     print(f"📡 Published {len(message['stocks'])} stocks to WebSocket clients")
